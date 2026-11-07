@@ -1,0 +1,13 @@
+{
+  "name": "cityjobmap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aplicació open source per trobar empreses i oportunitats laborals al voltant de Reus",
+  "packageManager": "pnpm@11.12.0",
+  "scripts": {
+    "dev": "pnpm --filter dashboard dev",
+    "build": "pnpm --filter dashboard build",
+    "lint": "pnpm --filter dashboard lint",
+    "preview": "pnpm --filter dashboard preview"
+  }
+}

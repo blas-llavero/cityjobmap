@@ -1,0 +1,61 @@
+# Node / pnpm
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# IDE / editors
+.vscode/
+.idea/
+
+# Operating system
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Coverage / temporary output
+coverage/
+htmlcov/
+.cache/
+tmp/
+temp/
+
+# Local logs
+*.log
+
+# Backup files created during development
+*.bak
+*.bak-*
+*.bak-before-*
+
+# Python packaging
+*.egg-info/
+build/
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+# Internal development notes
+INSTRUCCIONS.md
+INSTRUCCIONS.md.txt
+
+# Diagnostic text outputs
+tools/*.txt
