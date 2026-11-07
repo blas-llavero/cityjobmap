@@ -36,23 +36,23 @@ export function LocationMap({
   const markerRef =
     useRef<Marker | null>(null)
 
+  const onSelectRef = useRef(onSelect)
+
+  useEffect(() => {
+    onSelectRef.current = onSelect
+  }, [onSelect])
+
   useEffect(() => {
     if (!containerRef.current) {
       return
     }
 
-    const hasSelectedPoint =
-      latitude != null &&
-      longitude != null
-
     const map = new Map({
       container: containerRef.current,
       style:
         'https://tiles.openfreemap.org/styles/liberty',
-      center: hasSelectedPoint
-        ? [longitude, latitude]
-        : [0, 20],
-      zoom: hasSelectedPoint ? 11 : 1.5,
+      center: [0, 20],
+      zoom: 1.5,
     })
 
     map.addControl(
@@ -78,21 +78,12 @@ export function LocationMap({
           ])
           .addTo(map)
 
-        onSelect(
+        onSelectRef.current(
           selectedLatitude,
           selectedLongitude,
         )
       },
     )
-
-    if (hasSelectedPoint) {
-      markerRef.current = new Marker()
-        .setLngLat([
-          longitude,
-          latitude,
-        ])
-        .addTo(map)
-    }
 
     mapRef.current = map
 
@@ -108,11 +99,16 @@ export function LocationMap({
   useEffect(() => {
     const map = mapRef.current
 
+    if (!map) {
+      return
+    }
+
     if (
-      !map ||
       latitude == null ||
       longitude == null
     ) {
+      markerRef.current?.remove()
+      markerRef.current = null
       return
     }
 
