@@ -341,12 +341,18 @@ function waitForMilliseconds(
   signal: AbortSignal,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    let timerId: number | undefined
+    if (signal.aborted) {
+      reject(
+        new DOMException(
+          'Operació cancel·lada',
+          'AbortError',
+        ),
+      )
+      return
+    }
 
     const handleAbort = () => {
-      if (timerId !== undefined) {
-        window.clearTimeout(timerId)
-      }
+      window.clearTimeout(timerId)
 
       reject(
         new DOMException(
@@ -356,12 +362,7 @@ function waitForMilliseconds(
       )
     }
 
-    if (signal.aborted) {
-      handleAbort()
-      return
-    }
-
-    timerId = window.setTimeout(() => {
+    const timerId = window.setTimeout(() => {
       signal.removeEventListener('abort', handleAbort)
       resolve()
     }, milliseconds)
