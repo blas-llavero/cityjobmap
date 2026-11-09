@@ -10,6 +10,8 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeployTrigger: checksPass
+    domains:
+      - cityjobmap-data.blasllavero.com
     envVars:
       - key: CITYJOBMAP_ALLOWED_ORIGINS
         value: https://blasllavero.com,https://blas-llavero.github.io
