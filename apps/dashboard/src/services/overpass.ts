@@ -50,11 +50,13 @@ function buildOrganizationSelectors(
 ): string {
   return `
     nwr["name"]["office"]${locationFilter};
-    nwr["name"]["amenity"~"school|college|university|training|research_institute"]${locationFilter};
-    nwr["name"]["craft"~"electrician|electronics_repair"]${locationFilter};
-    nwr["name"]["shop"~"computer|electronics"]${locationFilter};
+    nwr["name"]["amenity"~"school|college|university|training|research_institute|clinic|hospital|pharmacy|veterinary|bank|library|community_centre|social_facility|kindergarten|childcare"]${locationFilter};
+    nwr["name"]["craft"]${locationFilter};
+    nwr["name"]["shop"]${locationFilter};
     nwr["name"]["industrial"]${locationFilter};
-    nwr["name"]["healthcare"="laboratory"]${locationFilter};
+    nwr["name"]["healthcare"]${locationFilter};
+    nwr["name"]["tourism"~"hotel|hostel|guest_house|museum|attraction"]${locationFilter};
+    nwr["name"]["leisure"~"fitness_centre|sports_centre"]${locationFilter};
   `
 }
 
@@ -222,6 +224,30 @@ function detectCategory(
 
   if (tags.office) {
     return `Oficina: ${tags.office}`
+  }
+
+  if (tags.craft) {
+    return `Ofici: ${tags.craft}`
+  }
+
+  if (tags.shop) {
+    return `Comerç: ${tags.shop}`
+  }
+
+  if (tags.healthcare) {
+    return `Salut: ${tags.healthcare}`
+  }
+
+  if (tags.tourism) {
+    return `Turisme: ${tags.tourism}`
+  }
+
+  if (tags.leisure) {
+    return `Lleure: ${tags.leisure}`
+  }
+
+  if (tags.amenity) {
+    return `Servei: ${tags.amenity}`
   }
 
   if (tags.industrial) {
