@@ -1,6 +1,7 @@
 import { API_BASE_URL } from './apiConfig'
 
 export type SiteAnalysisStatus =
+  | 'specific_job_match'
   | 'possible_active_offer'
   | 'careers_page'
   | 'contact_page'
@@ -8,7 +9,7 @@ export type SiteAnalysisStatus =
   | 'robots_blocked'
 
 export type SiteEvidence = {
-  kind: 'offer' | 'careers' | 'contact'
+  kind: 'job_match' | 'offer' | 'careers' | 'contact'
   label: string
   url: string
   excerpt: string | null
@@ -21,6 +22,8 @@ export type SiteAnalysis = {
   status_label: string
   career_url: string | null
   contact_url: string | null
+  job_query?: string | null
+  job_match_url?: string | null
   pages_checked: string[]
   evidence: SiteEvidence[]
   blocked_urls: string[]
@@ -36,6 +39,7 @@ type ApiErrorResponse = {
 export async function analyzeWebsite(
   website: string,
   languages: string[],
+  jobQuery = '',
   signal?: AbortSignal,
 ): Promise<SiteAnalysis> {
   const response = await fetch(`${API_BASE_URL}/analyze-site`, {
@@ -46,6 +50,7 @@ export async function analyzeWebsite(
     body: JSON.stringify({
       website,
       languages,
+      job_query: jobQuery.trim() || null,
     }),
     signal,
   })
