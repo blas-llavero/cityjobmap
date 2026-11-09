@@ -1,7 +1,8 @@
 import type { GeocodedLocation } from './locationApi'
+import { API_BASE_URL } from './apiConfig'
 
-const LOCAL_OVERPASS_ENDPOINT =
-  'http://127.0.0.1:8000/overpass-query'
+const OVERPASS_ENDPOINT =
+  `${API_BASE_URL}/overpass-query`
 
 const INITIAL_FALLBACK_RADIUS_KM = 6
 
@@ -63,7 +64,7 @@ async function executeOverpassQuery(
   signal?: AbortSignal,
 ): Promise<OverpassResponse> {
   const response = await fetch(
-    LOCAL_OVERPASS_ENDPOINT,
+    OVERPASS_ENDPOINT,
     {
       method: 'POST',
       headers: {
