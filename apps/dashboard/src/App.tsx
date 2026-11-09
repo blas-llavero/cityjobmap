@@ -133,6 +133,7 @@ function getRelevanceLabel(
 
 
 type OpportunityTone =
+  | 'match'
   | 'offer'
   | 'careers'
   | 'contact'
@@ -150,6 +151,27 @@ type OpportunityView = {
 function buildOpportunityView(
   analysis: SiteAnalysis,
 ): OpportunityView {
+  if (analysis.status === 'specific_job_match') {
+    const jobEvidence = analysis.evidence.find(
+      (item) => item.kind === 'job_match',
+    )
+
+    return {
+      title: 'Coincidència específica amb la professió',
+      description:
+        analysis.job_query
+          ? `S’ha trobat «${analysis.job_query}» dins d’una pàgina laboral o d’una possible oferta.`
+          : 'S’ha trobat la professió cercada dins d’una pàgina laboral o d’una possible oferta.',
+      primaryUrl:
+        jobEvidence?.url ??
+        analysis.job_match_url ??
+        analysis.career_url ??
+        analysis.final_home_url,
+      primaryLabel: 'Revisa la coincidència',
+      tone: 'match',
+    }
+  }
+
   if (analysis.status === 'possible_active_offer') {
     const offerEvidence = analysis.evidence.find(
       (item) => item.kind === 'offer',
@@ -329,11 +351,12 @@ const SITE_ANALYSIS_PRIORITY: Record<
   SiteAnalysis['status'],
   number
 > = {
-  possible_active_offer: 0,
-  careers_page: 1,
-  contact_page: 2,
-  website_only: 3,
-  robots_blocked: 4,
+  specific_job_match: 0,
+  possible_active_offer: 1,
+  careers_page: 2,
+  contact_page: 3,
+  website_only: 4,
+  robots_blocked: 5,
 }
 
 function waitForMilliseconds(
@@ -978,6 +1001,7 @@ function App() {
       const analysis = await analyzeWebsite(
         organization.website,
         selectedLanguageCodes,
+        customJobQuery,
       )
 
       setSiteAnalyses((currentAnalyses) => ({
@@ -1080,6 +1104,7 @@ function App() {
           const analysis = await analyzeWebsite(
             organization.website,
             selectedLanguageCodes,
+            customJobQuery,
             controller.signal,
           )
 
