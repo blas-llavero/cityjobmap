@@ -1,3 +1,5 @@
+import { API_BASE_URL } from './apiConfig'
+
 export type GeocodedLocation = {
   query: string
   display_name: string
@@ -12,7 +14,6 @@ type ApiErrorResponse = {
   detail?: string
 }
 
-const API_BASE_URL = 'http://127.0.0.1:8000'
 
 export async function geocodeLocation(
   query: string,
