@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import os
 import re
 import socket
 import unicodedata
@@ -332,6 +333,31 @@ class CandidateLink:
     score: int
 
 
+DEFAULT_ALLOWED_ORIGINS = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://blasllavero.com",
+    "https://blas-llavero.github.io",
+}
+
+
+def get_allowed_origins() -> list[str]:
+    configured_origins = os.getenv(
+        "CITYJOBMAP_ALLOWED_ORIGINS",
+        "",
+    )
+
+    origins = set(DEFAULT_ALLOWED_ORIGINS)
+
+    for origin in configured_origins.split(","):
+        normalized = origin.strip().rstrip("/")
+
+        if normalized:
+            origins.add(normalized)
+
+    return sorted(origins)
+
+
 app = FastAPI(
     title=APP_NAME,
     version="0.1.0",
@@ -339,10 +365,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=get_allowed_origins(),
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
