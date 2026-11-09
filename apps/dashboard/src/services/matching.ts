@@ -867,6 +867,7 @@ export function evaluateOrganization(
   organization: OrganizationResult,
   selectedProfessionIds: string[],
   selectedLanguageCodes: string[] = ['en'],
+  customJobQuery = '',
 ): OrganizationEvaluation {
   const selectedLanguages =
     normalizeSelectedLanguages(
@@ -921,6 +922,69 @@ export function evaluateOrganization(
       of result.reasons
     ) {
       reasons.add(reason)
+    }
+  }
+
+  const normalizedCustomJobQuery =
+    normalizeText(customJobQuery)
+
+  if (normalizedCustomJobQuery) {
+    const searchableText =
+      normalizeText(
+        [
+          organization.name,
+          organization.category,
+          organization.searchableText,
+        ].join(' '),
+      )
+
+    const customTerms =
+      normalizedCustomJobQuery
+        .split(' ')
+        .filter((term) => term.length >= 3)
+
+    const matchingCustomTerms =
+      customTerms.filter(
+        (term) => searchableText.includes(term),
+      )
+
+    const phraseMatch =
+      searchableText.includes(
+        normalizedCustomJobQuery,
+      )
+
+    if (
+      phraseMatch ||
+      matchingCustomTerms.length > 0
+    ) {
+      const customScore =
+        phraseMatch
+          ? 68
+          : Math.min(
+              60,
+              30 +
+                matchingCustomTerms.length * 10,
+            )
+
+      highestProfileScore =
+        Math.max(
+          highestProfileScore,
+          customScore,
+        )
+
+      matchedProfileIds.push(
+        'custom-job',
+      )
+
+      matchedProfileLabels.push(
+        customJobQuery.trim(),
+      )
+
+      reasons.add(
+        phraseMatch
+          ? `Coincidència amb la cerca lliure: ${customJobQuery.trim()}`
+          : `Paraules de la cerca lliure: ${matchingCustomTerms.slice(0, 3).join(', ')}`,
+      )
     }
   }
 
