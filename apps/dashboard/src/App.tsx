@@ -492,11 +492,26 @@ function App() {
   ])
 
   const relevantOrganizations = useMemo(
-    () =>
-      evaluatedOrganizations.filter(
+    () => {
+      const hasCustomJobQuery =
+        customJobQuery.trim().length >= 2
+
+      if (
+        hasCustomJobQuery &&
+        selectedProfessionIds.length === 0
+      ) {
+        return evaluatedOrganizations
+      }
+
+      return evaluatedOrganizations.filter(
         ({ evaluation }) => evaluation.isRelevant,
-      ),
-    [evaluatedOrganizations],
+      )
+    },
+    [
+      evaluatedOrganizations,
+      customJobQuery,
+      selectedProfessionIds.length,
+    ],
   )
 
   const visibleOrganizations = useMemo(() => {
@@ -1578,7 +1593,12 @@ function App() {
             <article className="stat-card">
               <span>Resultats rellevants</span>
               <strong>{relevantOrganizations.length}</strong>
-              <small>Coincideixen amb els perfils marcats</small>
+              <small>
+                {customJobQuery.trim() &&
+                selectedProfessionIds.length === 0
+                  ? 'Organitzacions potencials per a la cerca lliure'
+                  : 'Coincideixen amb els perfils marcats'}
+              </small>
             </article>
 
             <article className="stat-card">
