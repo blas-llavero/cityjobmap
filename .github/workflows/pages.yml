@@ -1,13 +1,6 @@
 name: Deploy frontend to GitHub Pages
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -22,16 +15,13 @@ concurrency:
 jobs:
   build:
     name: Build GitHub Pages
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: main
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6.1.1
