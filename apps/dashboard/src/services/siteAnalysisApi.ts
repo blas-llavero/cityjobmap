@@ -1,3 +1,5 @@
+import { API_BASE_URL } from './apiConfig'
+
 export type SiteAnalysisStatus =
   | 'possible_active_offer'
   | 'careers_page'
@@ -30,7 +32,6 @@ type ApiErrorResponse = {
   detail?: string
 }
 
-const API_BASE_URL = 'http://127.0.0.1:8000'
 
 export async function analyzeWebsite(
   website: string,
