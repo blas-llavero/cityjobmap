@@ -22,7 +22,7 @@ APP_NAME = "CityJobMap API"
 
 USER_AGENT = (
     "CityJobMap/0.1 "
-    "(local open-source job research tool)"
+    "(+https://github.com/blas-llavero/cityjobmap)"
 )
 
 MAX_PAGES = 8
@@ -278,6 +278,122 @@ class GeocodeResponse(BaseModel):
     country_code: str
     location_name: str
     bounding_box: list[float] | None = None
+
+
+NOMINATIM_MIN_INTERVAL_SECONDS = 1.1
+NOMINATIM_CACHE_LIMIT = 512
+
+NOMINATIM_REQUEST_LOCK = asyncio.Lock()
+NOMINATIM_LAST_REQUEST_AT = 0.0
+
+NOMINATIM_SEARCH_CACHE: dict[
+    str,
+    dict[str, object],
+] = {}
+
+NOMINATIM_REVERSE_CACHE: dict[
+    str,
+    dict[str, object],
+] = {}
+
+
+def cache_nominatim_result(
+    cache: dict[str, dict[str, object]],
+    key: str,
+    value: dict[str, object],
+) -> None:
+    if (
+        key not in cache
+        and len(cache) >= NOMINATIM_CACHE_LIMIT
+    ):
+        oldest_key = next(iter(cache))
+        cache.pop(oldest_key, None)
+
+    cache[key] = value
+
+
+async def request_nominatim(
+    url: str,
+    params: dict[str, str | int],
+) -> httpx.Response:
+    global NOMINATIM_LAST_REQUEST_AT
+
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json",
+        "Accept-Language": (
+            "en,ca;q=0.9,es;q=0.8"
+        ),
+    }
+
+    async with NOMINATIM_REQUEST_LOCK:
+        loop = asyncio.get_running_loop()
+
+        elapsed = (
+            loop.time()
+            - NOMINATIM_LAST_REQUEST_AT
+        )
+
+        wait_seconds = max(
+            0.0,
+            NOMINATIM_MIN_INTERVAL_SECONDS
+            - elapsed,
+        )
+
+        if wait_seconds > 0:
+            await asyncio.sleep(wait_seconds)
+
+        async with httpx.AsyncClient(
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            follow_redirects=True,
+        ) as client:
+            for attempt in range(2):
+                response = await client.get(
+                    url,
+                    params=params,
+                    headers=headers,
+                )
+
+                NOMINATIM_LAST_REQUEST_AT = (
+                    loop.time()
+                )
+
+                if (
+                    response.status_code != 429
+                    or attempt == 1
+                ):
+                    return response
+
+                retry_after = 2.0
+
+                raw_retry_after = (
+                    response.headers.get(
+                        "Retry-After"
+                    )
+                )
+
+                if raw_retry_after:
+                    try:
+                        parsed_retry_after = float(
+                            raw_retry_after
+                        )
+
+                        if parsed_retry_after > 0:
+                            retry_after = min(
+                                5.0,
+                                max(
+                                    NOMINATIM_MIN_INTERVAL_SECONDS,
+                                    parsed_retry_after,
+                                ),
+                            )
+                    except ValueError:
+                        pass
+
+                await asyncio.sleep(
+                    retry_after
+                )
+
+        return response
 
 
 class OverpassRequest(BaseModel):
@@ -1653,30 +1769,25 @@ async def geocode_location(
             detail="La ubicació és obligatòria.",
         )
 
-    timeout = httpx.Timeout(
-        REQUEST_TIMEOUT_SECONDS
+    cache_key = query.casefold()
+
+    cached = NOMINATIM_SEARCH_CACHE.get(
+        cache_key
     )
 
+    if cached is not None:
+        return GeocodeResponse(**cached)
+
     try:
-        async with httpx.AsyncClient(
-            timeout=timeout
-        ) as client:
-            response = await client.get(
-                NOMINATIM_SEARCH_URL,
-                params={
-                    "q": query,
-                    "format": "jsonv2",
-                    "limit": 1,
-                    "addressdetails": 1,
-                },
-                headers={
-                    "User-Agent": USER_AGENT,
-                    "Accept": "application/json",
-                    "Accept-Language": (
-                        "en,ca;q=0.9,es;q=0.8"
-                    ),
-                },
-            )
+        response = await request_nominatim(
+            NOMINATIM_SEARCH_URL,
+            {
+                "q": query,
+                "format": "jsonv2",
+                "limit": 1,
+                "addressdetails": 1,
+            },
+        )
     except httpx.HTTPError as error:
         raise HTTPException(
             status_code=502,
@@ -1685,6 +1796,17 @@ async def geocode_location(
                 "el servei de localització."
             ),
         ) from error
+
+    if response.status_code == 429:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "El servei de localització "
+                "està limitant temporalment "
+                "les consultes. Torna-ho a "
+                "provar d'aquí uns segons."
+            ),
+        )
 
     if response.status_code != 200:
         raise HTTPException(
@@ -1717,7 +1839,6 @@ async def geocode_location(
         )
 
     result = results[0]
-
     address = result.get("address") or {}
 
     country_code = str(
@@ -1745,7 +1866,9 @@ async def geocode_location(
             ),
         ) from error
 
-    raw_bounding_box = result.get("boundingbox")
+    raw_bounding_box = result.get(
+        "boundingbox"
+    )
 
     bounding_box = None
 
@@ -1763,10 +1886,13 @@ async def geocode_location(
         except (TypeError, ValueError):
             bounding_box = None
 
-    return GeocodeResponse(
+    geocoded = GeocodeResponse(
         query=query,
         display_name=str(
-            result.get("display_name", query)
+            result.get(
+                "display_name",
+                query,
+            )
         ),
         latitude=latitude,
         longitude=longitude,
@@ -1774,6 +1900,14 @@ async def geocode_location(
         location_name=str(location_name),
         bounding_box=bounding_box,
     )
+
+    cache_nominatim_result(
+        NOMINATIM_SEARCH_CACHE,
+        cache_key,
+        geocoded.model_dump(),
+    )
+
+    return geocoded
 
 
 
@@ -2291,6 +2425,18 @@ class ReverseGeocodeRequest(BaseModel):
 async def reverse_geocode_location(
     payload: ReverseGeocodeRequest,
 ):
+    cache_key = (
+        f"{payload.latitude:.5f},"
+        f"{payload.longitude:.5f}"
+    )
+
+    cached = NOMINATIM_REVERSE_CACHE.get(
+        cache_key
+    )
+
+    if cached is not None:
+        return cached
+
     params = {
         "format": "jsonv2",
         "lat": f"{payload.latitude:.7f}",
@@ -2300,24 +2446,11 @@ async def reverse_geocode_location(
         "layer": "address",
     }
 
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "application/json",
-    }
-
     try:
-        async with httpx.AsyncClient(
-            timeout=REQUEST_TIMEOUT_SECONDS,
-            follow_redirects=True,
-        ) as client:
-            response = await client.get(
-                NOMINATIM_REVERSE_URL,
-                params=params,
-                headers=headers,
-            )
-
-            response.raise_for_status()
-
+        response = await request_nominatim(
+            NOMINATIM_REVERSE_URL,
+            params,
+        )
     except httpx.HTTPError as error:
         raise HTTPException(
             status_code=502,
@@ -2326,6 +2459,27 @@ async def reverse_geocode_location(
                 "el servei de localització."
             ),
         ) from error
+
+    if response.status_code == 429:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "El servei de localització "
+                "està limitant temporalment "
+                "les consultes. Torna-ho a "
+                "provar d'aquí uns segons."
+            ),
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "El servei de localització "
+                f"ha retornat l'error "
+                f"{response.status_code}."
+            ),
+        )
 
     try:
         data = response.json()
@@ -2412,7 +2566,7 @@ async def reverse_geocode_location(
         f"{payload.longitude:.5f}"
     )
 
-    return {
+    result = {
         "query": coordinate_query,
         "display_name": display_name,
         "latitude": payload.latitude,
@@ -2426,3 +2580,10 @@ async def reverse_geocode_location(
         "bounding_box": None,
     }
 
+    cache_nominatim_result(
+        NOMINATIM_REVERSE_CACHE,
+        cache_key,
+        result,
+    )
+
+    return result
