@@ -390,6 +390,9 @@ function App() {
     'computer-teacher',
   ])
 
+  const [customJobQuery, setCustomJobQuery] =
+    useState('')
+
   const [selectedLanguageCodes, setSelectedLanguageCodes] =
     useState<SearchLanguageCode[]>(['en'])
 
@@ -458,6 +461,7 @@ function App() {
           organization,
           selectedProfessionIds,
           selectedLanguageCodes,
+          customJobQuery,
         ),
       }))
       .sort((first, second) => {
@@ -484,6 +488,7 @@ function App() {
     organizations,
     selectedProfessionIds,
     selectedLanguageCodes,
+    customJobQuery,
   ])
 
   const relevantOrganizations = useMemo(
@@ -891,8 +896,13 @@ function App() {
       return
     }
 
-    if (selectedProfessionIds.length === 0) {
-      setNotice('Selecciona com a mínim un perfil professional.')
+    if (
+      selectedProfessionIds.length === 0 &&
+      customJobQuery.trim().length < 2
+    ) {
+      setNotice(
+        'Selecciona un perfil professional o escriu una professió a la cerca lliure.',
+      )
       return
     }
 
@@ -1403,6 +1413,39 @@ function App() {
             </div>
           </section>
 
+          <div className="custom-job-search">
+            <label
+              className="field-label"
+              htmlFor="custom-job-query"
+            >
+              Cerca lliure de professió
+            </label>
+
+            <input
+              id="custom-job-query"
+              type="text"
+              value={customJobQuery}
+              disabled={
+                isSearching ||
+                isBatchAnalyzing
+              }
+              onChange={(event) => {
+                clearCurrentSearch()
+                setCustomJobQuery(
+                  event.target.value,
+                )
+                setNotice(
+                  'La cerca lliure ha canviat. Prepara una nova cerca per actualitzar els resultats.',
+                )
+              }}
+              placeholder="Ex.: infermer/a, soldador/a, arquitecte, data analyst..."
+            />
+
+            <p className="field-help">
+              Pots utilitzar aquesta cerca sola o combinar-la amb els perfils predefinits.
+            </p>
+          </div>
+
           <div className="section-title-row">
             <div>
               <p className="field-label">Perfils professionals</p>
@@ -1464,7 +1507,10 @@ function App() {
             type="button"
             onClick={prepareSearch}
             disabled={
-              selectedProfessionIds.length === 0 ||
+              (
+                selectedProfessionIds.length === 0 &&
+                customJobQuery.trim().length < 2
+              ) ||
               isSearching ||
               isLocating ||
               !resolvedLocation
@@ -1553,14 +1599,19 @@ function App() {
 
             <article className="stat-card">
               <span>Perfils actius</span>
-              <strong>{selectedProfessions.length}</strong>
+              <strong>
+                {selectedProfessions.length +
+                  (customJobQuery.trim() ? 1 : 0)}
+              </strong>
               <small>
-                {selectedProfessions.length > 0
-                  ? selectedProfessions
-                      .slice(0, 2)
-                      .map((profession) => profession.label)
-                      .join(' · ')
-                  : 'Cap perfil seleccionat'}
+                {customJobQuery.trim()
+                  ? `Lliure: ${customJobQuery.trim()}`
+                  : selectedProfessions.length > 0
+                    ? selectedProfessions
+                        .slice(0, 2)
+                        .map((profession) => profession.label)
+                        .join(' · ')
+                    : 'Cap perfil seleccionat'}
               </small>
             </article>
           </section>
