@@ -255,6 +255,7 @@ STRONG_OFFER_TERMS_BY_LANGUAGE = {
 
 
 Status = Literal[
+    "specific_job_match",
     "possible_active_offer",
     "careers_page",
     "contact_page",
@@ -418,9 +419,19 @@ class AnalyzeRequest(BaseModel):
         default_factory=lambda: ["en"],
     )
 
+    job_query: str | None = Field(
+        default=None,
+        max_length=200,
+    )
+
 
 class Evidence(BaseModel):
-    kind: Literal["offer", "careers", "contact"]
+    kind: Literal[
+        "job_match",
+        "offer",
+        "careers",
+        "contact",
+    ]
     label: str
     url: str
     excerpt: str | None = None
@@ -433,6 +444,8 @@ class AnalyzeResponse(BaseModel):
     status_label: str
     career_url: str | None
     contact_url: str | None
+    job_query: str | None = None
+    job_match_url: str | None = None
     pages_checked: list[str]
     evidence: list[Evidence]
     blocked_urls: list[str]
@@ -1753,6 +1766,88 @@ def excerpt_for_term(
 
 
 
+def match_job_query(
+    text: str,
+    job_query: str | None,
+) -> str | None:
+    if not job_query:
+        return None
+
+    normalized_query = normalize_text(
+        job_query
+    )
+
+    if len(normalized_query) < 2:
+        return None
+
+    if normalized_query in text:
+        return normalized_query
+
+    ignored_terms = {
+        "a",
+        "amb",
+        "and",
+        "de",
+        "del",
+        "dels",
+        "el",
+        "els",
+        "en",
+        "for",
+        "la",
+        "les",
+        "of",
+        "per",
+        "the",
+        "una",
+        "un",
+        "y",
+    }
+
+    query_terms = [
+        term
+        for term in re.findall(
+            r"[a-z0-9]+",
+            normalized_query,
+        )
+        if (
+            len(term) >= 3
+            and term not in ignored_terms
+        )
+    ]
+
+    if not query_terms:
+        return None
+
+    matched_terms: list[str] = []
+
+    for term in query_terms:
+        if term in text:
+            matched_terms.append(term)
+            continue
+
+        if len(term) >= 6:
+            stem = term[:6]
+
+            if stem in text:
+                matched_terms.append(stem)
+
+    required_matches = (
+        1
+        if len(query_terms) == 1
+        else max(
+            2,
+            (len(query_terms) + 1) // 2,
+        )
+    )
+
+    if len(matched_terms) < required_matches:
+        return None
+
+    return matched_terms[0]
+
+
+
 
 @app.post(
     "/geocode-location",
@@ -2042,6 +2137,15 @@ async def analyze_site(
         payload.languages
     )
 
+    job_query = (
+        payload.job_query.strip()
+        if payload.job_query
+        else None
+    )
+
+    if job_query == "":
+        job_query = None
+
     career_terms = terms_for_languages(
         CAREER_TERMS_BY_LANGUAGE,
         languages,
@@ -2082,6 +2186,8 @@ async def analyze_site(
                 ),
                 career_url=None,
                 contact_url=None,
+                job_query=job_query,
+                job_match_url=None,
                 pages_checked=[],
                 evidence=[],
                 blocked_urls=[start_url],
@@ -2276,6 +2382,7 @@ async def analyze_site(
 
         career_url: str | None = None
         contact_url: str | None = None
+        job_match_url: str | None = None
 
         for url, label, html in pages:
             text = page_text(html)
@@ -2302,6 +2409,41 @@ async def analyze_site(
                 ),
                 contact_terms,
             )
+
+            job_context = bool(
+                career_term
+                or offer_term
+            )
+
+            matched_job_term = (
+                match_job_query(
+                    combined,
+                    job_query,
+                )
+                if job_context
+                else None
+            )
+
+            if (
+                matched_job_term
+                and job_match_url is None
+            ):
+                job_match_url = url
+
+                evidence.append(
+                    Evidence(
+                        kind="job_match",
+                        label=(
+                            "Coincidència específica: "
+                            f"{job_query}"
+                        ),
+                        url=url,
+                        excerpt=excerpt_for_term(
+                            text,
+                            matched_job_term,
+                        ),
+                    )
+                )
 
             if offer_term:
                 evidence.append(
@@ -2353,12 +2495,27 @@ async def analyze_site(
                     )
                 )
 
+        has_job_match = any(
+            item.kind == "job_match"
+            for item in evidence
+        )
+
         has_offer = any(
             item.kind == "offer"
             for item in evidence
         )
 
-        if has_offer:
+        if has_job_match:
+            status: Status = (
+                "specific_job_match"
+            )
+
+            status_label = (
+                "Coincidència específica amb "
+                "la professió cercada"
+            )
+
+        elif has_offer:
             status: Status = (
                 "possible_active_offer"
             )
@@ -2399,6 +2556,8 @@ async def analyze_site(
             status_label=status_label,
             career_url=career_url,
             contact_url=contact_url,
+            job_query=job_query,
+            job_match_url=job_match_url,
             pages_checked=[
                 url
                 for url, _, _ in pages
