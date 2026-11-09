@@ -1873,6 +1873,16 @@ async def overpass_query(
     )
 
 
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {
+        "service": APP_NAME,
+        "status": "ok",
+        "health": "/health",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {
