@@ -2006,6 +2006,71 @@ async def geocode_location(
 
 
 
+OVERPASS_CACHE_TTL_SECONDS = 600.0
+OVERPASS_CACHE_LIMIT = 64
+
+OVERPASS_CACHE: dict[
+    str,
+    tuple[float, dict[str, object]],
+] = {}
+
+EUROPE_COUNTRY_CODES = {
+    "ad", "al", "at", "ba", "be", "bg",
+    "by", "ch", "cy", "cz", "de", "dk",
+    "ee", "es", "fi", "fr", "gb", "gr",
+    "hr", "hu", "ie", "is", "it", "li",
+    "lt", "lu", "lv", "mc", "md", "me",
+    "mk", "mt", "nl", "no", "pl", "pt",
+    "ro", "rs", "ru", "se", "si", "sk",
+    "sm", "tr", "ua", "va", "xk",
+}
+
+
+def get_overpass_cache(
+    key: str,
+) -> dict[str, object] | None:
+    cached = OVERPASS_CACHE.get(key)
+
+    if cached is None:
+        return None
+
+    stored_at, data = cached
+
+    age = (
+        asyncio.get_running_loop().time()
+        - stored_at
+    )
+
+    if age > OVERPASS_CACHE_TTL_SECONDS:
+        OVERPASS_CACHE.pop(key, None)
+        return None
+
+    return data
+
+
+def set_overpass_cache(
+    key: str,
+    data: dict[str, object],
+) -> None:
+    if (
+        key not in OVERPASS_CACHE
+        and len(OVERPASS_CACHE)
+        >= OVERPASS_CACHE_LIMIT
+    ):
+        oldest_key = next(
+            iter(OVERPASS_CACHE)
+        )
+        OVERPASS_CACHE.pop(
+            oldest_key,
+            None,
+        )
+
+    OVERPASS_CACHE[key] = (
+        asyncio.get_running_loop().time(),
+        data,
+    )
+
+
 @app.post("/overpass-query")
 async def overpass_query(
     payload: OverpassRequest,
@@ -2015,10 +2080,25 @@ async def overpass_query(
         or ""
     ).strip().lower()
 
+    cache_key = (
+        f"{country_code}|{payload.query}"
+    )
+
+    cached = get_overpass_cache(
+        cache_key
+    )
+
+    if cached is not None:
+        return cached
+
     global_endpoints = [
         (
             "Private.coffee",
             "https://overpass.private.coffee/api/interpreter",
+        ),
+        (
+            "VK Maps Overpass",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
         ),
         (
             "Overpass principal",
@@ -2034,20 +2114,29 @@ async def overpass_query(
             ),
             *global_endpoints,
         ]
+    elif country_code in EUROPE_COUNTRY_CODES:
+        endpoints = [
+            (
+                "Overpass Europe",
+                "https://ovp.dresel.systems/api/interpreter",
+            ),
+            *global_endpoints,
+        ]
     else:
         endpoints = global_endpoints
 
     errors: list[str] = []
 
     timeout = httpx.Timeout(
-        connect=12.0,
-        read=70.0,
+        connect=10.0,
+        read=45.0,
         write=20.0,
-        pool=12.0,
+        pool=10.0,
     )
 
     async with httpx.AsyncClient(
-        timeout=timeout
+        timeout=timeout,
+        follow_redirects=True,
     ) as client:
         for name, endpoint in endpoints:
             try:
@@ -2070,12 +2159,25 @@ async def overpass_query(
 
             if response.status_code == 200:
                 try:
-                    return response.json()
+                    data = response.json()
                 except ValueError:
                     errors.append(
                         f"{name}: resposta JSON no vàlida"
                     )
                     continue
+
+                if not isinstance(data, dict):
+                    errors.append(
+                        f"{name}: resposta inesperada"
+                    )
+                    continue
+
+                set_overpass_cache(
+                    cache_key,
+                    data,
+                )
+
+                return data
 
             errors.append(
                 f"{name}: HTTP "
@@ -2084,6 +2186,7 @@ async def overpass_query(
             )
 
             if response.status_code not in {
+                408,
                 429,
                 500,
                 502,
@@ -2100,6 +2203,7 @@ async def overpass_query(
             + " | ".join(errors)
         ),
     )
+
 
 
 @app.get("/")
